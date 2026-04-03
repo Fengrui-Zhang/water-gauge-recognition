@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>河道水位识别 Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Crowdsourced Water Gauge Reader</p>
+          <h1>淹没水深识别系统</h1>
+          <p class="hero-text">
+            面向众包场景设计：任意机位、任意视角、单张图片输入。Demo
+            通过豆包视觉模型读取桥墩水尺，并尽量输出厘米级淹没深度与不确定性。
+          </p>
+        </div>
+        <div class="hero-metrics">
+          <div class="metric-card">
+            <span class="metric-label">刻度粒度</span>
+            <strong>2 cm / 条</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">输入条件</span>
+            <strong>单图 + 任意视角</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">输出目标</span>
+            <strong>量化深度</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="panel control-panel">
+          <div class="section-title">
+            <h2>分析配置</h2>
+            <p>本地页面上传图片，本地服务代理调用豆包 Responses API。</p>
+          </div>
+
+          <label class="field">
+            <span>ARK API Key</span>
+            <input
+              id="apiKeyInput"
+              type="password"
+              placeholder="如果未在服务端设置 ARK_API_KEY，请在这里填写"
+              autocomplete="off"
+            />
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>模型名称</span>
+              <input id="modelInput" type="text" />
+            </label>
+            <label class="field">
+              <span>图片文件</span>
+              <input id="fileInput" type="file" accept="image/*" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>样例图片</span>
+            <select id="sampleSelect"></select>
+          </label>
+
+          <div class="button-row">
+            <button id="useSampleButton" class="ghost-button">载入样例图</button>
+            <button id="analyzeButton" class="primary-button">开始识别</button>
+          </div>
+
+          <label class="field">
+            <span>Prompt（可编辑）</span>
+            <textarea id="promptInput" rows="16"></textarea>
+          </label>
+
+          <div id="statusBar" class="status-bar idle">
+            等待上传图片并开始分析。
+          </div>
+        </section>
+
+        <section class="panel preview-panel">
+          <div class="section-title">
+            <h2>图片预览</h2>
+            <p>建议优先保证水尺区域清晰、无遮挡，并尽量包含水面线。</p>
+          </div>
+          <div class="preview-frame">
+            <img
+              id="previewImage"
+              src=""
+              alt="待分析图片预览"
+            />
+          </div>
+          <div class="image-meta" id="imageMeta">
+            正在加载 sample 目录中的样例图
+          </div>
+        </section>
+
+        <section class="panel result-panel">
+          <div class="section-title">
+            <h2>识别结果</h2>
+            <p>如果模型判断信息不足，状态会切换为人工复核。</p>
+          </div>
+
+          <div class="result-grid">
+            <div class="result-card emphasis">
+              <span class="result-label">淹没深度</span>
+              <strong id="depthValue">--</strong>
+            </div>
+            <div class="result-card">
+              <span class="result-label">状态</span>
+              <strong id="statusValue">待分析</strong>
+            </div>
+            <div class="result-card">
+              <span class="result-label">置信度</span>
+              <strong id="confidenceValue">--</strong>
+            </div>
+            <div class="result-card">
+              <span class="result-label">不确定性</span>
+              <strong id="uncertaintyValue">--</strong>
+            </div>
+          </div>
+
+          <div class="result-grid secondary-grid">
+            <div class="result-card">
+              <span class="result-label">水尺类型</span>
+              <strong id="gaugeTypeValue">--</strong>
+            </div>
+            <div class="result-card">
+              <span class="result-label">最小分度</span>
+              <strong id="divisionValue">--</strong>
+            </div>
+            <div class="result-card">
+              <span class="result-label">所在刻度区间</span>
+              <strong id="betweenMarksValue">--</strong>
+            </div>
+            <div class="result-card">
+              <span class="result-label">换算水深</span>
+              <strong id="depthMeterValue">--</strong>
+            </div>
+          </div>
+
+          <div class="details-grid">
+            <div class="detail-block">
+              <span class="detail-title">读数依据</span>
+              <p id="basisValue">等待模型返回。</p>
+            </div>
+            <div class="detail-block">
+              <span class="detail-title">结论摘要</span>
+              <p id="summaryValue">等待模型返回。</p>
+            </div>
+            <div class="detail-block">
+              <span class="detail-title">关键证据</span>
+              <ul id="evidenceList" class="evidence-list">
+                <li>等待模型返回。</li>
+              </ul>
+            </div>
+            <div class="detail-block">
+              <span class="detail-title">辅助指标</span>
+              <p id="auxValue">等待模型返回。</p>
+            </div>
+            <div class="detail-block">
+              <span class="detail-title">误差来源</span>
+              <p id="errorSourcesValue">等待模型返回。</p>
+            </div>
+          </div>
+
+          <div class="raw-panel">
+            <div class="raw-header">
+              <h3>原始响应</h3>
+              <button id="toggleRawButton" class="ghost-button small">
+                展开
+              </button>
+            </div>
+            <pre id="rawOutput" class="raw-output collapsed">暂无响应。</pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+  </html>
