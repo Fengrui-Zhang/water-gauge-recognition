@@ -1,6 +1,6 @@
 import { ApiError, analyzeImage, tryParseJson } from "../lib/ark.js";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 async function readJsonBody(request) {
   try {
