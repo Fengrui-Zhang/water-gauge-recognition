@@ -46,6 +46,15 @@ function setStatus(kind, message) {
   statusBar.textContent = message;
 }
 
+function estimateDataUrlBytes(dataUrl) {
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex === -1) {
+    return dataUrl.length;
+  }
+  const base64 = dataUrl.slice(commaIndex + 1);
+  return Math.floor((base64.length * 3) / 4);
+}
+
 function renderEvidence(items) {
   evidenceList.innerHTML = "";
   if (!Array.isArray(items) || items.length === 0) {
@@ -202,6 +211,15 @@ async function toOriginalImageDataUrl(file) {
   if (typeof dataUrl !== "string") {
     throw new Error("无法生成图片数据。");
   }
+
+  const estimatedBytes = estimateDataUrlBytes(dataUrl);
+  const vercelSafeLimitBytes = 3.2 * 1024 * 1024;
+  if (estimatedBytes > vercelSafeLimitBytes) {
+    throw new Error(
+      "图片过大。当前 Vercel 部署的函数请求体上限约为 4.5 MB，原图经过 base64 后会继续膨胀。请先裁剪水尺区域，或压缩到 3.2 MB 以下再上传。"
+    );
+  }
+
   return dataUrl;
 }
 

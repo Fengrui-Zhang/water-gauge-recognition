@@ -10,6 +10,9 @@
 ## 目录结构
 
 - `/server.js`: 本地静态服务 + API 代理
+- `/api/config.js`: Vercel 配置接口
+- `/api/analyze.js`: Vercel 识别接口
+- `/lib/ark.js`: 本地服务与 Vercel 函数共用的豆包调用逻辑
 - `/public/index.html`: Demo 页面
 - `/public/app.js`: 上传、预览、请求、结果渲染
 - `/public/prompt-template.js`: Prompt 模板与默认模型
@@ -42,6 +45,21 @@ http://localhost:3000
 ```
 
 如果未设置 `ARK_API_KEY`，也可以直接在页面里填写 Key。
+
+## Vercel 部署说明
+
+如果部署到 Vercel：
+
+1. 在项目环境变量中设置 `ARK_API_KEY`
+2. 直接使用仓库根目录部署
+3. 示例图片来自 `/public/examples`，不依赖自定义文件路由
+
+当前仓库已经补齐了 Vercel 的 `api/config.js` 和 `api/analyze.js`，页面在 Vercel 上会请求这两个函数。
+
+注意：
+
+- Vercel Function 的请求体上限是 4.5 MB，官方文档见 [Vercel Functions Limits](https://vercel.com/docs/functions/limitations)
+- 当前前端会在发送前检查图片大小；如果原图太大，会提示先裁剪水尺区域或压缩后再上传
 
 ## Prompt 设计思路
 
