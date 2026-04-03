@@ -103,6 +103,66 @@ function summarizePlainTextError(text, status) {
   return compact || "服务端返回了无法解析的响应。";
 }
 
+function isRetriableResponse(response, payload, rawText) {
+  if (!response.ok && [408, 409, 425, 429, 500, 502, 503, 504].includes(response.status)) {
+    return true;
+  }
+
+  if (payload?.retryable) {
+    return true;
+  }
+
+  const compact = (rawText || "").replace(/\s+/g, " ").trim();
+  return compact.includes("An error occurred") || compact.includes("FUNCTION_INVOCATION_TIMEOUT");
+}
+
+async function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function requestAnalyze(payload) {
+  let lastResponse = null;
+  let lastText = "";
+  let lastData = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt > 0) {
+      setStatus("loading", "首次请求失败，正在自动重试一次。");
+      loadingOverlayText.textContent = "网络或模型响应波动，系统正在自动重试。";
+      await sleep(900);
+    }
+
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    const data = tryParseJson(responseText);
+
+    lastResponse = response;
+    lastText = responseText;
+    lastData = data;
+
+    if (data && response.ok && data.ok) {
+      return { response, responseText, data };
+    }
+
+    if (!isRetriableResponse(response, data, responseText) || attempt === 1) {
+      return { response, responseText, data };
+    }
+  }
+
+  return {
+    response: lastResponse,
+    responseText: lastText,
+    data: lastData,
+  };
+}
+
 function renderEvidence(items) {
   evidenceList.innerHTML = "";
   if (!Array.isArray(items) || items.length === 0) {
@@ -325,21 +385,13 @@ async function analyze() {
   try {
     const file = await ensureSelectedFile();
     const imageDataUrl = await toImageDataUrl(file);
-    const response = await fetch("/api/analyze", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        apiKey: apiKeyInput.value.trim(),
-        model: modelInput.value.trim(),
-        prompt: promptInput.value.trim(),
-        imageDataUrl,
-      }),
-    });
-
-    const responseText = await response.text();
-    const data = tryParseJson(responseText);
+    const requestPayload = {
+      apiKey: apiKeyInput.value.trim(),
+      model: modelInput.value.trim(),
+      prompt: promptInput.value.trim(),
+      imageDataUrl,
+    };
+    const { response, responseText, data } = await requestAnalyze(requestPayload);
     rawOutput.textContent = data
       ? JSON.stringify(data, null, 2)
       : responseText || "服务端未返回正文。";
