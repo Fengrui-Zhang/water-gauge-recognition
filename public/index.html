@@ -17,27 +17,13 @@
             通过豆包视觉模型读取桥墩水尺，并尽量输出厘米级淹没深度与不确定性。
           </p>
         </div>
-        <div class="hero-metrics">
-          <div class="metric-card">
-            <span class="metric-label">刻度粒度</span>
-            <strong>2 cm / 条</strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">输入条件</span>
-            <strong>单图 + 任意视角</strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">输出目标</span>
-            <strong>量化深度</strong>
-          </div>
-        </div>
       </header>
 
       <main class="workspace">
         <section class="panel control-panel">
           <div class="section-title">
             <h2>分析配置</h2>
-            <p>本地页面上传图片，本地服务代理调用豆包 Responses API。</p>
+            <p>上传图片后由后端接口代理调用豆包 Responses API。</p>
           </div>
 
           <label class="field">
@@ -68,7 +54,9 @@
 
           <div class="button-row">
             <button id="useSampleButton" class="ghost-button">载入样例图</button>
-            <button id="analyzeButton" class="primary-button">开始识别</button>
+            <button id="analyzeButton" class="primary-button">
+              <span id="analyzeButtonLabel">开始识别</span>
+            </button>
           </div>
 
           <label class="field">
@@ -87,14 +75,15 @@
             <p>建议优先保证水尺区域清晰、无遮挡，并尽量包含水面线。</p>
           </div>
           <div class="preview-frame">
-            <img
-              id="previewImage"
-              src=""
-              alt="待分析图片预览"
-            />
+            <img id="previewImage" src="" alt="待分析图片预览" />
+            <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite">
+              <div class="loading-spinner"></div>
+              <strong>模型分析中</strong>
+              <p id="loadingOverlayText">正在上传图片并等待模型返回结果。</p>
+            </div>
           </div>
           <div class="image-meta" id="imageMeta">
-            正在加载 sample 目录中的样例图
+            正在加载 examples 目录中的样例图
           </div>
         </section>
 

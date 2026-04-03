@@ -18,9 +18,13 @@ const fileInput = document.querySelector("#fileInput");
 const sampleSelect = document.querySelector("#sampleSelect");
 const useSampleButton = document.querySelector("#useSampleButton");
 const analyzeButton = document.querySelector("#analyzeButton");
+const analyzeButtonLabel = document.querySelector("#analyzeButtonLabel");
 const previewImage = document.querySelector("#previewImage");
+const loadingOverlay = document.querySelector("#loadingOverlay");
+const loadingOverlayText = document.querySelector("#loadingOverlayText");
 const imageMeta = document.querySelector("#imageMeta");
 const statusBar = document.querySelector("#statusBar");
+const resultPanel = document.querySelector(".result-panel");
 const depthValue = document.querySelector("#depthValue");
 const statusValue = document.querySelector("#statusValue");
 const confidenceValue = document.querySelector("#confidenceValue");
@@ -40,10 +44,35 @@ const toggleRawButton = document.querySelector("#toggleRawButton");
 let sampleImages = [];
 let currentImageFile = null;
 let rawExpanded = false;
+let loadingTicker = null;
 
 function setStatus(kind, message) {
   statusBar.className = `status-bar ${kind}`;
   statusBar.textContent = message;
+}
+
+function setLoadingState(isLoading, message = "正在上传图片并等待模型返回结果。") {
+  analyzeButton.disabled = isLoading;
+  analyzeButton.classList.toggle("is-loading", isLoading);
+  resultPanel.classList.toggle("is-loading", isLoading);
+  loadingOverlay.classList.toggle("hidden", !isLoading);
+  loadingOverlayText.textContent = message;
+
+  if (isLoading) {
+    const frames = ["模型识别中", "模型识别中.", "模型识别中..", "模型识别中..."];
+    let index = 0;
+    analyzeButtonLabel.textContent = frames[index];
+    clearInterval(loadingTicker);
+    loadingTicker = window.setInterval(() => {
+      index = (index + 1) % frames.length;
+      analyzeButtonLabel.textContent = frames[index];
+    }, 420);
+    return;
+  }
+
+  clearInterval(loadingTicker);
+  loadingTicker = null;
+  analyzeButtonLabel.textContent = "开始识别";
 }
 
 function estimateDataUrlBytes(dataUrl) {
@@ -53,6 +82,25 @@ function estimateDataUrlBytes(dataUrl) {
   }
   const base64 = dataUrl.slice(commaIndex + 1);
   return Math.floor((base64.length * 3) / 4);
+}
+
+function tryParseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function summarizePlainTextError(text, status) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.includes("FUNCTION_PAYLOAD_TOO_LARGE") || status === 413) {
+    return "图片请求体超过 Vercel 限制。系统已优先尝试原图；若仍失败，请先裁剪水尺区域或换更小图片。";
+  }
+  if (compact.includes("An error occurred") || compact.includes("<!doctype html")) {
+    return "服务端返回了非 JSON 错误页，通常表示 Vercel Function 发生异常、超时或请求体超限。";
+  }
+  return compact || "服务端返回了无法解析的响应。";
 }
 
 function renderEvidence(items) {
@@ -197,6 +245,19 @@ async function fetchSampleAsFile() {
   });
 }
 
+async function downscaleImage(file, maxSide, quality) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -206,21 +267,40 @@ function readFileAsDataUrl(file) {
   });
 }
 
-async function toOriginalImageDataUrl(file) {
-  const dataUrl = await readFileAsDataUrl(file);
-  if (typeof dataUrl !== "string") {
+async function toImageDataUrl(file) {
+  const originalDataUrl = await readFileAsDataUrl(file);
+  if (typeof originalDataUrl !== "string") {
     throw new Error("无法生成图片数据。");
   }
 
-  const estimatedBytes = estimateDataUrlBytes(dataUrl);
+  const estimatedBytes = estimateDataUrlBytes(originalDataUrl);
   const vercelSafeLimitBytes = 3.2 * 1024 * 1024;
   if (estimatedBytes > vercelSafeLimitBytes) {
+    setStatus("loading", "原图过大，正在自动压缩到适合在线部署的大小。");
+    loadingOverlayText.textContent = "原图过大，正在压缩后再提交识别。";
+    const attempts = [
+      { maxSide: 1800, quality: 0.9 },
+      { maxSide: 1500, quality: 0.82 },
+      { maxSide: 1280, quality: 0.76 },
+    ];
+
+    for (const attempt of attempts) {
+      const compressedDataUrl = await downscaleImage(
+        file,
+        attempt.maxSide,
+        attempt.quality
+      );
+      if (estimateDataUrlBytes(compressedDataUrl) <= vercelSafeLimitBytes) {
+        return compressedDataUrl;
+      }
+    }
+
     throw new Error(
-      "图片过大。当前 Vercel 部署的函数请求体上限约为 4.5 MB，原图经过 base64 后会继续膨胀。请先裁剪水尺区域，或压缩到 3.2 MB 以下再上传。"
+      "图片过大，自动压缩后仍超过在线部署限制。请先裁剪出水尺区域，或改用更小的图片。"
     );
   }
 
-  return dataUrl;
+  return originalDataUrl;
 }
 
 async function ensureSelectedFile() {
@@ -238,13 +318,13 @@ async function ensureSelectedFile() {
 }
 
 async function analyze() {
-  analyzeButton.disabled = true;
+  setLoadingState(true);
   setStatus("loading", "正在上传原始图片并调用豆包视觉模型，请稍候。");
   rawOutput.textContent = "请求中...";
 
   try {
     const file = await ensureSelectedFile();
-    const imageDataUrl = await toOriginalImageDataUrl(file);
+    const imageDataUrl = await toImageDataUrl(file);
     const response = await fetch("/api/analyze", {
       method: "POST",
       headers: {
@@ -258,12 +338,31 @@ async function analyze() {
       }),
     });
 
-    const data = await response.json();
-    rawOutput.textContent = JSON.stringify(data, null, 2);
+    const responseText = await response.text();
+    const data = tryParseJson(responseText);
+    rawOutput.textContent = data
+      ? JSON.stringify(data, null, 2)
+      : responseText || "服务端未返回正文。";
+
+    if (!data) {
+      const message = summarizePlainTextError(responseText, response.status);
+      setStatus("error", `识别失败：${message}`);
+      renderResult(null, message);
+      return;
+    }
 
     if (!response.ok || !data.ok) {
-      setStatus("error", data.error || "识别失败，请检查接口配置。");
-      renderResult(null, typeof data.providerBody === "string" ? data.providerBody : data.detail);
+      const message =
+        data.error ||
+        summarizePlainTextError(
+          typeof data.providerBody === "string" ? data.providerBody : data.detail || "",
+          response.status
+        );
+      setStatus("error", `识别失败：${message}`);
+      renderResult(
+        null,
+        typeof data.providerBody === "string" ? data.providerBody : data.detail || message
+      );
       return;
     }
 
@@ -279,7 +378,7 @@ async function analyze() {
     rawOutput.textContent = String(error);
     renderResult(null, "请求过程中发生异常。");
   } finally {
-    analyzeButton.disabled = false;
+    setLoadingState(false);
   }
 }
 
