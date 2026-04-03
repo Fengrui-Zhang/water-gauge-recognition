@@ -1,5 +1,16 @@
 import { DEFAULT_MODEL, DEFAULT_PROMPT } from "./prompt-template.js";
 
+const EXAMPLE_IMAGES = [
+  "68cm.jpg",
+  "68cm-模糊.jpg",
+  "中.png",
+  "近.png",
+  "远.jpg",
+].map((name) => ({
+  name,
+  url: `/examples/${encodeURIComponent(name)}`,
+}));
+
 const apiKeyInput = document.querySelector("#apiKeyInput");
 const modelInput = document.querySelector("#modelInput");
 const promptInput = document.querySelector("#promptInput");
@@ -131,37 +142,24 @@ async function loadConfig() {
 }
 
 async function loadSamples() {
-  try {
-    const response = await fetch("/api/samples");
-    if (!response.ok) {
-      throw new Error(`/api/samples 返回 ${response.status}，通常说明服务还在运行旧版本，请重启 npm start`);
+  sampleImages = EXAMPLE_IMAGES;
+  sampleSelect.innerHTML = "";
+
+  sampleImages.forEach((sample, index) => {
+    const option = document.createElement("option");
+    option.value = sample.name;
+    option.textContent = sample.name;
+    if (index === 0) {
+      option.selected = true;
     }
+    sampleSelect.appendChild(option);
+  });
 
-    const data = await response.json();
-    if (!data?.ok || !Array.isArray(data.samples) || data.samples.length === 0) {
-      throw new Error("sample 目录中没有可用图片。");
-    }
-
-    sampleImages = data.samples;
-    sampleSelect.innerHTML = "";
-
-    sampleImages.forEach((sample, index) => {
-      const option = document.createElement("option");
-      option.value = sample.name;
-      option.textContent = sample.name;
-      if (index === 0) {
-        option.selected = true;
-      }
-      sampleSelect.appendChild(option);
-    });
-
-    const firstSample = sampleImages[0];
+  const firstSample = sampleImages[0];
+  if (firstSample) {
     setPreviewFromUrl(firstSample.url, `当前为样例图：${firstSample.name}`);
-  } catch (error) {
-    setStatus(
-      "idle",
-      `样例列表读取失败：${error instanceof Error ? error.message : String(error)}`
-    );
+  } else {
+    setStatus("idle", "未配置样例图，请手动上传图片。");
   }
 }
 

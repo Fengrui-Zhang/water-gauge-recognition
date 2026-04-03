@@ -13,7 +13,7 @@
 - `/public/index.html`: Demo 页面
 - `/public/app.js`: 上传、预览、请求、结果渲染
 - `/public/prompt-template.js`: Prompt 模板与默认模型
-- `/public/assets/sample-site-1.jpg`: 示例图片
+- `/public/examples`: 示例图片
 
 ## 运行方式
 

@@ -11,7 +11,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "public");
-const sampleDir = path.join(__dirname, "sample");
 const port = process.env.PORT || 3000;
 const host = process.env.HOST || "127.0.0.1";
 const apiBaseUrl = "https://ark.cn-beijing.volces.com/api/v3/responses";
@@ -63,12 +62,6 @@ const mimeTypes = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
-
-function isImageFile(fileName) {
-  return [".jpg", ".jpeg", ".png", ".webp"].includes(
-    path.extname(fileName).toLowerCase()
-  );
-}
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -305,30 +298,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === "GET" && req.url.startsWith("/api/samples")) {
-    try {
-      const entries = fs
-        .readdirSync(sampleDir, { withFileTypes: true })
-        .filter((entry) => entry.isFile() && isImageFile(entry.name))
-        .map((entry) => ({
-          name: entry.name,
-          url: `/sample/${encodeURIComponent(entry.name)}`,
-        }));
-
-      sendJson(res, 200, {
-        ok: true,
-        samples: entries,
-      });
-    } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: "读取 sample 目录失败。",
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
-    return;
-  }
-
   if (req.method === "POST" && req.url === "/api/analyze") {
     try {
       const rawBody = await readRequestBody(req);
@@ -341,21 +310,6 @@ const server = http.createServer(async (req, res) => {
         detail: error instanceof Error ? error.message : String(error),
       });
     }
-    return;
-  }
-
-  if (req.method === "GET" && req.url.startsWith("/sample/")) {
-    const requestedPath = decodeURIComponent(
-      new URL(req.url, `http://${req.headers.host}`).pathname.replace(/^\/sample\//, "")
-    );
-    const resolvedPath = path.normalize(path.join(sampleDir, requestedPath));
-
-    if (!resolvedPath.startsWith(sampleDir) || !isImageFile(resolvedPath)) {
-      sendText(res, 403, "Forbidden");
-      return;
-    }
-
-    serveFile(res, resolvedPath);
     return;
   }
 
